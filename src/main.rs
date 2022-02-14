@@ -1,38 +1,54 @@
+use std::collections::HashMap;
+
+use reqwest::header::AUTHORIZATION;
 mod model;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // A hard-coded JSON
-    let json = r#"
-            {
-              "main": {
-                "temp": 30.94
-              }
-            }
-        "#;
-
-    // Deserialize the hardcoded JSON into a Weather struct
-    let weather1: model::Weather = serde_json::from_str(json).unwrap();
-
-    println!("\nWeather from a JSON we hard-coded locally:\n{:?}", weather1);
-
-    //
-    // Now that we know we can deserialize a hard-coded JSON into a struct model,
-    // let's see if we can fetch the weather from the backend.
-    //
+      
+    //https://docs.rs/reqwest/latest/reqwest/
+    let mut map = HashMap::new();
+    map.insert("username", "jabob");
+    map.insert("password", "D0nChaKn0w");
 
     let client = reqwest::Client::new();
-
-    let response = client
-        .get("https://api.openweathermap.org/data/2.5/weather?q=corvallis&appid=b98e3f089c86867862f28236d174368a&&units=imperial")
+    let auth_response = client
+        .post("http://ec2-52-12-191-147.us-west-2.compute.amazonaws.com:3000/v1/auth")
+        .json(&map)
         .send()
         .await?;
 
-    let weather2 = response
+    let authToken = auth_response
+        .json::<model::Token>()
+        .await?;
+    println!("\nThe token is:\n {:?}", authToken.access_token);
+
+    //https://stackoverflow.com/questions/66534704/how-to-add-basic-authorization-header-by-passing-the-secret-using-reqwest
+    let header = "Bearer".to_owned() + &authToken.access_token;
+
+    let greeting_response = client
+        .get("http://ec2-52-12-191-147.us-west-2.compute.amazonaws.com:3000/v1/hello")
+        .header(AUTHORIZATION,header.clone())
+        .send()
+        .await?;
+
+    let greeting = greeting_response
+        .json::<model::Greeting>()
+        .await?;
+
+    println!("\nWeather from openweathermap.org:\n {:?}", greeting);
+
+    let weather_response = client
+        .get("http://ec2-52-12-191-147.us-west-2.compute.amazonaws.com:3000/v1/weather")
+        .header(AUTHORIZATION,&header)
+        .send()
+        .await?;
+
+    let weather = weather_response
         .json::<model::Weather>()
         .await?;
 
-    println!("\nWeather from openweathermap.org:\n {:?}", weather2);
+    println!("\nWeather from openweathermap.org:\n {:?}", weather);
 
     Ok(())
 }
